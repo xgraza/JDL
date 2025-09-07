@@ -1,0 +1,59 @@
+plugins {
+    id 'java'
+    id 'com.github.gmazzo.buildconfig' version '5.3.5'
+}
+
+group = project.group
+version = project.version
+
+buildConfig {
+    buildConfigField(String, "HASH", "${execute("git rev-parse HEAD")}")
+    buildConfigField(String, "BRANCH", "${execute("git branch --show-current")}")
+    buildConfigField(String, "GROUP", project.group.toString())
+    buildConfigField(String, "VERSION", project.version.toString())
+    buildConfigField(String, "BUILD", project.build_number.toString())
+    buildConfigField(String, "BUILD_TIME", "${new Date(System.currentTimeMillis()).format("MM/dd/yyyy HH:mm")}")
+
+    packageName project.group
+    useJavaOutput()
+    generateAtSync = true
+}
+
+sourceSets.main.java.srcDirs += "build/gen/buildconfig/src/main"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation group: 'org.java-websocket', name: 'Java-WebSocket', version: project.java_websocket
+    implementation group: 'com.google.code.gson', name: 'gson', version: project.gson
+}
+
+jar {
+    from {
+        configurations.library.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+}
+
+tasks.withType(JavaCompile).configureEach {
+    dependsOn(generateBuildConfig)
+}
+
+def execute(String cmd) {
+    try {
+        def stdout = new ByteArrayOutputStream()
+
+        exec {
+            commandLine cmd.split(" ")
+            standardOutput = stdout
+        }
+
+        return stdout.toString().trim()
+    } catch (ignored) {
+        return null
+    }
+}
