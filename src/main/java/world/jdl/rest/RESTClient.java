@@ -1,237 +1,245 @@
 package world.jdl.rest;
 
-import com.google.gson.FieldNamingPolicy;
-import com.google.gson.FormattingStyle;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.Strictness;
 import world.jdl.structure.Snowflake;
 
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * @author xgraza
- * @since 9/7/25
+ * @since 9/8/25
  */
 public final class RESTClient
 {
-    public static final String DISCORD_API_URL = "https://discord.com/api/v10/";
-    public static final String REQUEST_USER_AGENT = "DiscordBot (https://github.com/xgraza/JDL, 1.0.0)";
+    private static final String DISCORD_API_URL = "https://discord.com/api/v10";
+    private static final String USER_AGENT = "DiscordBot (https://github.com/xgraza/JDL, 1.0.0)";
 
-    private static final Timer RATE_LIMIT_SCHEDULER = new Timer();
     static final Gson GSON = new GsonBuilder()
-            .setFieldNamingStrategy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
-            .setFormattingStyle(FormattingStyle.PRETTY)
-            .serializeNulls()
-            .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeSerializer())
             .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeDeserializer())
+            .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeSerializer())
+            .setStrictness(Strictness.LENIENT)
             .create();
 
-    private final Map<String, RateLimit> ratelimitMap = new ConcurrentHashMap<>();
-    private final Set<String> rateLimitedRoutesSet = new LinkedHashSet<>();
-
-    final HttpClient httpClient = HttpClient.newBuilder()
+    private final HttpClient httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.ALWAYS)
+            .connectTimeout(Duration.ofSeconds(5L))
             .build();
-    private final String botToken;
+    private final Timer rateLimitScheduler = new Timer();
+    private final String authorization;
 
-    public RESTClient(final String botToken)
+    private final Map<String, RateLimit> rateLimitedRouteMap = new ConcurrentHashMap<>();
+    private final Set<String> currentRateLimitedRouteSet = new LinkedHashSet<>();
+
+    public RESTClient(final String authorization)
     {
-        this.botToken = botToken;
+        this.authorization = authorization;
 
-        // TODO: duplicates packets...
-        RATE_LIMIT_SCHEDULER.scheduleAtFixedRate(new TimerTask()
+        rateLimitScheduler.scheduleAtFixedRate(new TimerTask()
         {
             @Override
             public void run()
             {
-                if (rateLimitedRoutesSet.isEmpty())
+                for (final String rateLimitedRoute : currentRateLimitedRouteSet)
                 {
-                    return;
-                }
-
-                for (final String route : rateLimitedRoutesSet)
-                {
-                    final RateLimit rateLimit = ratelimitMap.get(route);
-                    if (rateLimit == null || !rateLimit.isRateLimitOver())
+                    final RateLimit rateLimit = rateLimitedRouteMap.get(rateLimitedRoute);
+                    if (rateLimit == null || rateLimit.getResetAtMS() == -1L)
                     {
                         continue;
                     }
-                    // Reset how many requests we have until we reach max
-                    rateLimit.setRemaining(rateLimit.getMaxRequests());
+                    final long rateLimitOverIn = Math.max(0L, rateLimit.getResetAtMS() - System.currentTimeMillis());
+                    if (rateLimitOverIn > 0L)
+                    {
+                        continue;
+                    }
 
-                    final Queue<RESTAction<?>> restActionQueue = rateLimit.getActionQueue();
-                    while (!restActionQueue.isEmpty())
+                    rateLimit.setRemaining(rateLimit.getLimit());
+                    final Queue<RESTAction<?>> queuedRestActions = rateLimit.getActionQueue();
+                    for (int i = 0; i < rateLimit.getLimit() - 1; ++i)
                     {
                         if (rateLimit.getRemaining() <= 0)
                         {
                             break;
                         }
-                        final RESTAction<?> restAction = restActionQueue.poll();
+                        final RESTAction<?> restAction = queuedRestActions.poll();
                         if (restAction == null)
                         {
                             break;
                         }
-                        restAction.setRatelimited(false);
-                        restAction.queue();
                         rateLimit.setRemaining(rateLimit.getRemaining() - 1);
+                        restAction.setThrottled(false);
+                        restAction.complete();
+                        if (restAction.isThrottled())
+                        {
+                            break;
+                        }
                     }
-
-                    if (restActionQueue.isEmpty())
+                    if (queuedRestActions.isEmpty())
                     {
-                        rateLimitedRoutesSet.remove(route);
-                        break;
+                        rateLimit.setResetAtMS(-1L);
+                        currentRateLimitedRouteSet.remove(rateLimitedRoute);
                     }
                 }
             }
-        }, 0L, 500L);
+        }, 0L, 1500L);
     }
 
-    public <T> RESTAction<T> get(final DiscordEndpoints.Endpoint<?> endpoint)
+    /**
+     * Creates an HTTP/GET request
+     * @param endpoint the {@link world.jdl.rest.Endpoints.Endpoint<T>}
+     * @return a {@link RESTAction<T>} to act upon
+     * @param <T> the expected type
+     */
+    public <T> RESTAction<T> get(final Endpoints.Endpoint<T> endpoint)
     {
-        try
+        final HttpRequest request = createRequest(endpoint).GET().build();
+        return new RESTAction<>(this, request, endpoint);
+    }
+
+    /**
+     * Creates a HTTP/POST request
+     * @param endpoint the {@link world.jdl.rest.Endpoints.Endpoint<T>}
+     * @param body an {@link Object} for what the body should be
+     * @return a {@link RESTAction<T>} to act upon
+     * @param <T> the expected type
+     */
+    public <T> RESTAction<T> post(final Endpoints.Endpoint<T> endpoint,
+                                  final Object body)
+    {
+        final HttpRequest.Builder requestBuilder = createRequest(endpoint);
+        if (body instanceof JsonElement element)
         {
-            final HttpRequest.Builder request = createBaseRequest(endpoint);
-            request.method(endpoint.method(), HttpRequest.BodyPublishers.noBody());
-            final RESTAction<T> restAction = new RESTAction<>(this, request, endpoint);
-            handleRateLimiting(endpoint, restAction);
-            return restAction;
-        } catch (URISyntaxException e)
-        {
-            throw new RuntimeException(e);
+            requestBuilder.setHeader("Content-Type", "application/json");
+            requestBuilder.POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(element)));
         }
+        return new RESTAction<>(this, requestBuilder.build(), endpoint);
     }
 
-    boolean parseRateLimitHeaders(final HttpResponse<?> response,
-                                  final RESTAction<?> restAction,
-                                  final DiscordEndpoints.Endpoint<?> endpoint)
+    /**
+     * Checks a {@link HttpResponse<?>}'s status code & x-ratelimit headers for Rate limits
+     * @param restAction the {@link RESTAction<?>}
+     * @param response the {@link HttpResponse<?>}
+     * @return if this request was rate limited
+     */
+    boolean checkForRateLimit(final RESTAction<?> restAction, final HttpResponse<?> response)
     {
+        final String endpointRoute = restAction.getEndpoint().route();
         final HttpHeaders headers = response.headers();
 
-        final Optional<String> rateLimitLimitHeader = headers.firstValue("x-ratelimit-limit");
-        final Optional<String> rateLimitResetAfterHeader = headers.firstValue("x-ratelimit-reset-after");
-        final Optional<String> rateLimitRemainingHeader = headers.firstValue("x-ratelimit-remaining");
-        if (rateLimitLimitHeader.isPresent()
-                && rateLimitResetAfterHeader.isPresent()
-                && rateLimitRemainingHeader.isPresent())
+        final String remainingHeader = getHeader(headers.firstValue("x-ratelimit-remaining"));
+        final String retryAfterHeader = getHeader(headers.firstValue("x-ratelimit-reset-after"));
+        final String limitHeader = getHeader(headers.firstValue("x-ratelimit-limit"));
+
+        if (remainingHeader == null || retryAfterHeader == null || limitHeader == null)
         {
-            final int limit = Integer.parseInt(rateLimitLimitHeader.get());
-            final double resetAfter = Double.parseDouble(rateLimitResetAfterHeader.get());
-            final long resetAt = (long) (System.currentTimeMillis() + (resetAfter * 1000.0));
-            final int remaining = Integer.parseInt(rateLimitRemainingHeader.get());
-            if (remaining > 0)
-            {
-                return false;
-            }
-
-            final RateLimit rateLimit = ratelimitMap.computeIfAbsent(
-                    endpoint.route(), RateLimit::new);
-
-            rateLimitedRoutesSet.add(rateLimit.getRoute());
-            if (!restAction.isRatelimited())
-            {
-                rateLimit.queue(restAction);
-            }
-            restAction.setRatelimited(true);
-            rateLimit.setRemaining(remaining);
-            rateLimit.setMaxRequests(limit);
-            rateLimit.setResetAt(resetAt);
+            return false;
         }
 
-        return true;
+        final int remaining = Integer.parseInt(remainingHeader);
+        final int limit = Integer.parseInt(limitHeader);
+        final long resetAtMS = System.currentTimeMillis()
+                + (long)(Double.parseDouble(retryAfterHeader) * 1000.0);
+
+        final RateLimit rateLimit = rateLimitedRouteMap.computeIfAbsent(
+                endpointRoute, RateLimit::new);
+        rateLimit.setLimit(limit);
+        rateLimit.setRemaining(remaining);
+
+        if (rateLimit.getRemaining() <= 0)
+        {
+            currentRateLimitedRouteSet.add(endpointRoute);
+
+            if (!restAction.isThrottled())
+            {
+                rateLimit.getActionQueue().add(restAction);
+            }
+            restAction.setThrottled(true);
+            rateLimit.setResetAtMS(resetAtMS);
+            return true;
+        }
+
+        return false;
     }
 
-    private void handleRateLimiting(final DiscordEndpoints.Endpoint<?> endpoint,
-                                    final RESTAction<?> restAction)
+    String getHeader(final Optional<String> optional)
     {
-        final RateLimit rateLimit = ratelimitMap.get(endpoint.route());
-        if (rateLimit != null && rateLimit.isRateLimited())
-        {
-            rateLimitedRoutesSet.add(endpoint.route());
-            if (!restAction.isRatelimited())
-            {
-                rateLimit.queue(restAction);
-            }
-            restAction.setRatelimited(true);
-        }
+        return optional.orElse(null);
     }
 
-    private HttpRequest.Builder createBaseRequest(final DiscordEndpoints.Endpoint<?> endpoint)
-            throws URISyntaxException
+    /**
+     * Creates a base request
+     * @param endpoint the {@link world.jdl.rest.Endpoints.Endpoint<T>} object
+     * @return a {@link HttpRequest.Builder}
+     * @param <T> the expected response type
+     */
+    private <T> HttpRequest.Builder createRequest(final Endpoints.Endpoint<T> endpoint)
     {
         return HttpRequest.newBuilder()
-                .uri(new URI(DISCORD_API_URL + endpoint.route()))
-                .header("User-Agent", REQUEST_USER_AGENT)
-                .header("Authorization", "Bot " + botToken);
+                .uri(URI.create(DISCORD_API_URL + endpoint.route()))
+                .setHeader("User-Agent", USER_AGENT)
+                .setHeader("Authorization", String.format("Bot %s", authorization));
     }
 
-    static final class RateLimit
+    HttpClient getHttpClient()
     {
-        private final String route;
+        return httpClient;
+    }
+
+    private static final class RateLimit
+    {
+        private int remaining, limit;
+        private long resetAtMS;
+
         private final Queue<RESTAction<?>> actionQueue = new ConcurrentLinkedQueue<>();
-        private long resetAt = -1L;
-        private int maxRequests, remaining;
 
-        RateLimit(final String route)
+        public RateLimit(final String route)
         {
-            this.route = route;
+
         }
 
-        void queue(final RESTAction<?> restAction)
-        {
-            actionQueue.add(restAction);
-        }
-
-        Queue<RESTAction<?>> getActionQueue()
+        public Queue<RESTAction<?>> getActionQueue()
         {
             return actionQueue;
         }
 
-        String getRoute()
-        {
-            return route;
-        }
-
-        void setResetAt(final long resetAt)
-        {
-            this.resetAt = resetAt;
-        }
-
-        void setMaxRequests(int maxRequests)
-        {
-            this.maxRequests = maxRequests;
-        }
-
-        int getMaxRequests()
-        {
-            return maxRequests;
-        }
-
-        void setRemaining(int remaining)
-        {
-            this.remaining = remaining;
-        }
-
-        int getRemaining()
+        public int getRemaining()
         {
             return remaining;
         }
 
-        boolean isRateLimited()
+        public void setRemaining(int remaining)
         {
-            return resetAt != -1;
+            this.remaining = remaining;
         }
 
-        boolean isRateLimitOver()
+        public int getLimit()
         {
-            return isRateLimited() && System.currentTimeMillis() - resetAt >= 50L;
+            return limit;
+        }
+
+        public void setLimit(int limit)
+        {
+            this.limit = limit;
+        }
+
+        public long getResetAtMS()
+        {
+            return resetAtMS;
+        }
+
+        public void setResetAtMS(long resetAtMS)
+        {
+            this.resetAtMS = resetAtMS;
         }
     }
 }
