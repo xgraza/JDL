@@ -1,14 +1,21 @@
 package world.jdl.rest;
 
+import world.jdl.structure.user.User;
+
 /**
  * @author xgraza
  * @since 9/7/25
  */
 public final class DiscordEndpoints
 {
-    public interface User
+    public interface Channels
     {
-        Endpoint<Object> CURRENT_USER = new Endpoint<>("GET", "users/@me", null);
+        Endpoint<Object> CREATE_MESSAGE = new Endpoint<>("POST", "channels/%s/messages", Object.class);
+    }
+
+    public interface Users
+    {
+        Endpoint<User> CURRENT_USER = new Endpoint<>("GET", "users/@me", User.class);
 
 //        // GET
 //        String CURRENT_USER = "users/@me";
@@ -31,11 +38,11 @@ public final class DiscordEndpoints
 //        String LEAVE_GUILD = "users/@me/guilds/%s";
     }
 
-    public record Endpoint<T>(String method, String endpoint, Class<T> responseType)
+    public record Endpoint<T>(String method, String route, Class<T> responseType)
         {
             public Endpoint<T> with(final Object... fmt)
             {
-                return new Endpoint<>(method, String.format(endpoint, fmt), responseType);
+                return new Endpoint<>(method, String.format(route, fmt), responseType);
             }
         }
 }

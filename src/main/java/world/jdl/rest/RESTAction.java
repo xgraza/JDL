@@ -4,7 +4,6 @@ import world.jdl.rest.callback.RESTCallback;
 import world.jdl.rest.callback.RESTErrorCallback;
 
 import java.io.IOException;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 
@@ -15,16 +14,22 @@ import java.net.http.HttpResponse;
  */
 public class RESTAction<T>
 {
-    private final HttpClient client;
-    private final HttpRequest request;
+    protected final RESTClient client;
+    public final HttpRequest.Builder request;
+    protected final DiscordEndpoints.Endpoint<?> endpoint;
 
-    private RESTCallback<T> callback;
-    private RESTErrorCallback<Throwable> errorCallback;
+    protected RESTCallback<T> callback;
+    protected RESTErrorCallback<Throwable> errorCallback;
 
-    public RESTAction(final HttpClient client, final HttpRequest request)
+    private boolean ratelimited;
+
+    public RESTAction(final RESTClient client,
+                      final HttpRequest.Builder request,
+                      final DiscordEndpoints.Endpoint<?> endpoint)
     {
         this.client = client;
         this.request = request;
+        this.endpoint = endpoint;
     }
 
     public void queue()
@@ -39,16 +44,51 @@ public class RESTAction<T>
 
     public void queue(final RESTCallback<T> callback, final RESTErrorCallback<Throwable> errorCallback)
     {
-        this.callback = callback;
-        this.errorCallback = errorCallback;
+        if (this.callback == null)
+        {
+            this.callback = callback;
+        }
+        if (this.errorCallback == null)
+        {
+            this.errorCallback = errorCallback;
+        }
+        sendRequest();
+    }
+
+    void setRatelimited(boolean ratelimited)
+    {
+        this.ratelimited = ratelimited;
+    }
+
+    boolean isRatelimited()
+    {
+        return ratelimited;
+    }
+
+    private void makeRequest() throws IOException, InterruptedException
+    {
+        if (ratelimited)
+        {
+            return;
+        }
+        final HttpResponse<String> response = client.httpClient.send(request.build(),
+                HttpResponse.BodyHandlers.ofString());
+        if (client.parseRateLimitHeaders(response, this, endpoint))
+        {
+            return;
+        }
+        if (callback != null)
+        {
+            Object type = RESTClient.GSON.fromJson(response.body(), endpoint.responseType());
+            callback.callback((T) type);
+        }
     }
 
     private void sendRequest()
     {
         try
         {
-            final HttpResponse<?> response = client.send(request, null);
-
+            makeRequest();
         } catch (IOException | InterruptedException e)
         {
             throw new RuntimeException(e);
