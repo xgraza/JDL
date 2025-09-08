@@ -1,8 +1,14 @@
 package world.jdl.gateway;
 
+import world.jdl.gateway.event.IGatewayEvent;
+import world.jdl.gateway.event.ReadyGatewayEvent;
 import world.jdl.gateway.packet.IServerPacketHandler;
 import world.jdl.gateway.packet.bi.HeartbeatGatewayPacket;
 import world.jdl.gateway.packet.server.*;
+import world.jdl.listener.IEventListener;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * @author xgraza
@@ -10,6 +16,13 @@ import world.jdl.gateway.packet.server.*;
  */
 final class GatewayPacketHandler implements IServerPacketHandler
 {
+    private static final Map<String, Class<? extends IGatewayEvent>> GATEWAY_EVENT_HANDLERS = new HashMap<>();
+
+    static
+    {
+        GATEWAY_EVENT_HANDLERS.put("READY", ReadyGatewayEvent.class);
+    }
+
     private final Connection connection;
 
     public GatewayPacketHandler(final Connection connection)
@@ -18,9 +31,27 @@ final class GatewayPacketHandler implements IServerPacketHandler
     }
 
     @Override
-    public void onDispatch(DispatchGatewayPacket packet)
+    public void onDispatch(final DispatchGatewayPacket packet)
     {
+        final Class<? extends IGatewayEvent> eventClass = GATEWAY_EVENT_HANDLERS.get(packet.getEventName());
+        if (eventClass == null)
+        {
+            System.out.println("Don't know how to handle " + packet.getEventName());
+            return;
+        }
+        final IGatewayEvent event = Connection.GSON.fromJson(packet.getData(), eventClass);
+        if (event != null)
+        {
+            dispatchEvent(event);
+        }
+    }
 
+    void dispatchEvent(final IGatewayEvent event)
+    {
+        for (final IEventListener listener : connection.getJDL().getListeners())
+        {
+            event.handle(listener);
+        }
     }
 
     @Override

@@ -2,6 +2,7 @@ package world.jdl.gateway.packet.client;
 
 import world.jdl.gateway.packet.IGatewayPacket;
 import world.jdl.gateway.packet.OP;
+import world.jdl.structure.user.activity.Presence;
 
 /**
  * @author xgraza
@@ -15,7 +16,7 @@ public final class IdentifyGatewayPacket implements IGatewayPacket
     private final boolean compress;
     private final Integer largeThreshold;
     private final Integer shard;
-    private final Object presence;
+    private final Presence presence;
     private final int intents;
 
     public IdentifyGatewayPacket(String token,
@@ -23,7 +24,7 @@ public final class IdentifyGatewayPacket implements IGatewayPacket
                                  boolean compress,
                                  Integer largeThreshold,
                                  Integer shard,
-                                 Object presence,
+                                 Presence presence,
                                  int intents)
     {
         this.token = token;

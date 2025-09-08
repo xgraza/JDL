@@ -3,6 +3,7 @@ package world.jdl.gateway;
 import com.google.gson.*;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+import world.jdl.JDL;
 import world.jdl.gateway.compression.Compression;
 import world.jdl.gateway.compression.Compressor;
 import world.jdl.gateway.compression.NoCompression;
@@ -13,6 +14,8 @@ import world.jdl.gateway.packet.OP;
 import world.jdl.gateway.packet.bi.HeartbeatGatewayPacket;
 import world.jdl.gateway.packet.client.*;
 import world.jdl.gateway.packet.server.*;
+import world.jdl.structure.Snowflake;
+import world.jdl.structure.user.activity.Presence;
 import world.jdl.util.ReflectionUtil;
 
 import java.net.URI;
@@ -29,11 +32,13 @@ public final class Connection extends WebSocketClient
 {
     public static final String DISCORD_GATEWAY_WS = "wss://gateway.discord.gg/?v=10&encoding=json";
     private static final Map<OP, Class<? extends IGatewayPacket>> PACKET_OP_REFERENCE_MAP = new HashMap<>();
-    public static final Gson GSON = new GsonBuilder()
+    static final Gson GSON = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .setStrictness(Strictness.LENIENT)
             .registerTypeAdapter(HeartbeatGatewayPacket.class, new HeartbeatGatewayPacket.HeartbeatPacketSerializer())
             .registerTypeAdapter(HeartbeatGatewayPacket.class, new HeartbeatGatewayPacket.HeartbeatPacketDeserializer())
+            .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeSerializer())
+            .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeDeserializer())
             .create();
     private static final IdentifyGatewayPacket.ConnectionProperties DEFAULT_PROPERTIES
             = new IdentifyGatewayPacket.ConnectionProperties(
@@ -59,17 +64,23 @@ public final class Connection extends WebSocketClient
     private final GatewayPacketHandler packetHandler;
     private final GatewayHeartbeat gatewayHeartbeat;
 
+    private final JDL jdl;
+    private final Presence defaultPresence;
     private final String token;
     private final int intents;
 
     private int lastSequence;
     private long latency = 0L;
 
-    public Connection(final Compression compression,
+    public Connection(final JDL jdl,
+                      final Presence defaultPresence,
+                      final Compression compression,
                       final String token,
                       final int intents)
     {
         super(Connection.createURI(compression));
+        this.jdl = jdl;
+        this.defaultPresence = defaultPresence;
         this.token = token;
         this.intents = intents;
 
@@ -84,21 +95,21 @@ public final class Connection extends WebSocketClient
 
     public void login()
     {
-        login(DEFAULT_PROPERTIES, null);
+        login(DEFAULT_PROPERTIES, defaultPresence);
     }
 
     public void login(final IdentifyGatewayPacket.ConnectionProperties properties)
     {
-        login(properties, null);
+        login(properties, defaultPresence);
     }
 
-    public void login(final Object presence)
+    public void login(final Presence presence)
     {
         login(DEFAULT_PROPERTIES, presence);
     }
 
     public void login(final IdentifyGatewayPacket.ConnectionProperties properties,
-                      final Object presence)
+                      final Presence presence)
     {
         sendPacket(new IdentifyGatewayPacket(token,
                 properties,
@@ -182,6 +193,11 @@ public final class Connection extends WebSocketClient
             // For whatever reason, GSON does not create the type if the passed in obj is null/empty
             packet = ReflectionUtil.createInstance(packetClass);
         }
+        if (packet instanceof DispatchGatewayPacket dispatchPacket)
+        {
+            dispatchPacket.setEventName(payload.getEventName());
+            dispatchPacket.setData(payload.getData());
+        }
         packet.handle(packetHandler);
     }
 
@@ -203,6 +219,11 @@ public final class Connection extends WebSocketClient
     public int getLastSequence()
     {
         return lastSequence;
+    }
+
+    public JDL getJDL()
+    {
+        return jdl;
     }
 
     private static URI createURI(final Compression compression)
