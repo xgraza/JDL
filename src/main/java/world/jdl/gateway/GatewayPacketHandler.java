@@ -1,7 +1,9 @@
 package world.jdl.gateway;
 
+import com.google.gson.JsonElement;
 import world.jdl.gateway.event.IGatewayEvent;
-import world.jdl.gateway.event.ReadyGatewayEvent;
+import world.jdl.gateway.event.events.GuildCreateGatewayEvent;
+import world.jdl.gateway.event.events.ReadyGatewayEvent;
 import world.jdl.gateway.packet.IServerPacketHandler;
 import world.jdl.gateway.packet.bi.HeartbeatGatewayPacket;
 import world.jdl.gateway.packet.server.*;
@@ -21,6 +23,7 @@ final class GatewayPacketHandler implements IServerPacketHandler
     static
     {
         GATEWAY_EVENT_HANDLERS.put("READY", ReadyGatewayEvent.class);
+        GATEWAY_EVENT_HANDLERS.put("GUILD_CREATE", GuildCreateGatewayEvent.class);
     }
 
     private final Connection connection;
@@ -39,10 +42,21 @@ final class GatewayPacketHandler implements IServerPacketHandler
             System.out.println("Don't know how to handle " + packet.getEventName());
             return;
         }
-        final IGatewayEvent event = Connection.GSON.fromJson(packet.getData(), eventClass);
-        if (event != null)
+
+        final JsonElement data = packet.getData();
+
+        switch (packet.getEventName())
         {
-            dispatchEvent(event);
+            case "GUILD_CREATE" -> dispatchEvent(new GuildCreateGatewayEvent(data));
+            default ->
+            {
+                final IGatewayEvent event = Connection.GSON.fromJson(packet.getData(), eventClass);
+                if (event == null)
+                {
+                    return;
+                }
+                dispatchEvent(event);
+            }
         }
     }
 

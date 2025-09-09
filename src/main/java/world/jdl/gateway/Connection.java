@@ -32,7 +32,7 @@ public final class Connection extends WebSocketClient
 {
     public static final String DISCORD_GATEWAY_WS = "wss://gateway.discord.gg/?v=10&encoding=json";
     private static final Map<OP, Class<? extends IGatewayPacket>> PACKET_OP_REFERENCE_MAP = new HashMap<>();
-    static final Gson GSON = new GsonBuilder()
+    public static final Gson GSON = new GsonBuilder()
             .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
             .setStrictness(Strictness.LENIENT)
             .registerTypeAdapter(HeartbeatGatewayPacket.class, new HeartbeatGatewayPacket.HeartbeatPacketSerializer())
@@ -171,6 +171,7 @@ public final class Connection extends WebSocketClient
 
     private void handleMessage(final String message)
     {
+        System.out.println(message);
         final Payload payload = GSON.fromJson(message, Payload.class);
         if (payload.getSequence() != null)
         {

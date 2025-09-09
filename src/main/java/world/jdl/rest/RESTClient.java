@@ -6,6 +6,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.Strictness;
 import world.jdl.structure.Snowflake;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;
@@ -104,6 +105,13 @@ public final class RESTClient
     {
         final HttpRequest request = createRequest(endpoint).GET().build();
         return new RESTAction<>(this, request, endpoint);
+    }
+
+    public <T> T getAsync(final Endpoints.Endpoint<T> endpoint)
+            throws IOException, InterruptedException
+    {
+        final RESTAction<T> restAction = get(endpoint);
+        return restAction.execute();
     }
 
     /**

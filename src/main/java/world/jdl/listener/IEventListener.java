@@ -1,6 +1,7 @@
 package world.jdl.listener;
 
-import world.jdl.gateway.event.ReadyGatewayEvent;
+import world.jdl.gateway.event.events.GuildCreateGatewayEvent;
+import world.jdl.gateway.event.events.ReadyGatewayEvent;
 
 /**
  * @author xgraza
@@ -9,6 +10,11 @@ import world.jdl.gateway.event.ReadyGatewayEvent;
 public interface IEventListener
 {
     default void onReady(ReadyGatewayEvent event)
+    {
+        // no-op
+    }
+
+    default void onGuildCreate(GuildCreateGatewayEvent event)
     {
         // no-op
     }

@@ -1,8 +1,11 @@
 package world.jdl;
 
+import world.jdl.cache.GuildCache;
+import world.jdl.cache.UserCache;
 import world.jdl.gateway.Connection;
 import world.jdl.gateway.GatewayIntent;
 import world.jdl.gateway.compression.Compression;
+import world.jdl.gateway.event.InternalEventHandler;
 import world.jdl.gateway.packet.client.IdentifyGatewayPacket;
 import world.jdl.listener.IEventListener;
 import world.jdl.rest.RESTClient;
@@ -25,6 +28,9 @@ public final class JDL
 
     private final Set<IEventListener> eventListenerSet;
 
+    private final UserCache users;
+    private final GuildCache guilds;
+
     public JDL(final String token,
                final int intents,
                final Compression compression,
@@ -33,11 +39,14 @@ public final class JDL
             throws InterruptedException
     {
         this.eventListenerSet = eventListenerSet;
+        eventListenerSet.add(new InternalEventHandler(this));
 
         restClient = new RESTClient(token);
         connection = new Connection(this, defaultPresence, compression, token, intents);
-
         connection.connectBlocking();
+
+        users = new UserCache(restClient);
+        guilds = new GuildCache(restClient);
     }
 
     public void login()
@@ -48,6 +57,16 @@ public final class JDL
     public void login(final IdentifyGatewayPacket.ConnectionProperties properties)
     {
         connection.login(properties);
+    }
+
+    public UserCache getUsers()
+    {
+        return users;
+    }
+
+    public GuildCache getGuilds()
+    {
+        return guilds;
     }
 
     public Set<IEventListener> getListeners()

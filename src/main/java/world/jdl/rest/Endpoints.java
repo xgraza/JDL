@@ -1,11 +1,26 @@
 package world.jdl.rest;
 
+import world.jdl.structure.guild.Guild;
+import world.jdl.structure.user.User;
+
 /**
  * @author xgraza
  * @since 9/8/25
  */
 public final class Endpoints
 {
+    public interface Users
+    {
+        Endpoint<User> GET_USER = Endpoint.of(
+                Endpoint.Method.GET, "/users/%s", User.class);
+    }
+
+    public interface Guilds
+    {
+        Endpoint<Guild> GET_GUILD = Endpoint.of(
+                Endpoint.Method.GET, "/guilds/%s/?with_counts=true", Guild.class);
+    }
+
     /**
      * Endpoints relating to a guild channel
      * @see <a href="https://discord.com/developers/docs/resources/channel#channels-resource">Discord Channels Resource</a>

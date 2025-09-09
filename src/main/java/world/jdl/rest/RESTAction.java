@@ -49,16 +49,9 @@ public final class RESTAction<T>
             {
                 return;
             }
-            final HttpResponse<String> response = restClient.getHttpClient().send(httpRequest,
-                    HttpResponse.BodyHandlers.ofString());
-            if (restClient.checkForRateLimit(this, response))
-            {
-                return;
-            }
             if (successCallback != null)
             {
-                successCallback.callback(RESTClient.GSON.fromJson(
-                        response.body(), endpoint.responseType()));
+                successCallback.callback(execute());
             }
         } catch (IOException | InterruptedException e)
         {
@@ -67,6 +60,17 @@ public final class RESTAction<T>
                 errorCallback.callback(e);
             }
         }
+    }
+
+    T execute() throws IOException, InterruptedException
+    {
+        final HttpResponse<String> response = restClient.getHttpClient().send(httpRequest,
+                HttpResponse.BodyHandlers.ofString());
+        if (restClient.checkForRateLimit(this, response))
+        {
+            return null;
+        }
+        return RESTClient.GSON.fromJson(response.body(), endpoint.responseType());
     }
 
     public Endpoints.Endpoint<T> getEndpoint()
