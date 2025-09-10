@@ -5,28 +5,23 @@ import world.jdl.cache.UserCache;
 import world.jdl.gateway.Connection;
 import world.jdl.gateway.GatewayIntent;
 import world.jdl.gateway.compression.Compression;
-import world.jdl.gateway.event.InternalEventHandler;
 import world.jdl.gateway.packet.client.IdentifyGatewayPacket;
-import world.jdl.listener.IEventListener;
+import world.jdl.observe.Observer;
+import world.jdl.observe.observables.GuildCreateGatewayObservable;
 import world.jdl.rest.RESTClient;
+import world.jdl.structure.guild.Guild;
 import world.jdl.structure.user.activity.Activity;
 import world.jdl.structure.user.activity.Presence;
 import world.jdl.util.Validator;
-
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.Set;
 
 /**
  * @author xgraza
  * @since 9/7/25
  */
-public final class JDL
+public final class JDL extends Observer
 {
     private final RESTClient restClient;
     private final Connection connection;
-
-    private final Set<IEventListener> eventListenerSet;
 
     private final UserCache users;
     private final GuildCache guilds;
@@ -34,19 +29,25 @@ public final class JDL
     public JDL(final String token,
                final int intents,
                final Compression compression,
-               final Set<IEventListener> eventListenerSet,
                final Presence defaultPresence)
             throws InterruptedException
     {
-        this.eventListenerSet = eventListenerSet;
-        eventListenerSet.add(new InternalEventHandler(this));
-
         restClient = new RESTClient(token);
+        users = new UserCache(restClient);
+        guilds = new GuildCache(restClient);
+
         connection = new Connection(this, defaultPresence, compression, token, intents);
         connection.connectBlocking();
 
-        users = new UserCache(restClient);
-        guilds = new GuildCache(restClient);
+        on(GuildCreateGatewayObservable.class, (event) ->
+        {
+            final Guild guild = event.getGuild();
+            if (guild == null)
+            {
+                return;
+            }
+            guilds.cache(guild.getId().getId(), guild);
+        });
     }
 
     public void login()
@@ -69,19 +70,12 @@ public final class JDL
         return guilds;
     }
 
-    public Set<IEventListener> getListeners()
-    {
-        return eventListenerSet;
-    }
-
     public static final class Builder
     {
         private String token;
         private int intents;
         private Compression compression = Compression.NONE;
         private Presence presence;
-
-        private final Set<IEventListener> eventListenerSet = new LinkedHashSet<>();
 
         public Builder setToken(String token)
         {
@@ -131,18 +125,12 @@ public final class JDL
             return this;
         }
 
-        public Builder addListener(final IEventListener... listeners)
-        {
-            Collections.addAll(eventListenerSet, listeners);
-            return this;
-        }
-
         public JDL build() throws InterruptedException
         {
             Validator.checkNonNull(token, "token");
             Validator.checkNonNull(compression, "compression");
             Validator.checkInRange(intents, 0, Integer.MAX_VALUE, "intents");
-            return new JDL(token, intents, compression, eventListenerSet, presence);
+            return new JDL(token, intents, compression, presence);
         }
     }
 }

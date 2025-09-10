@@ -1,14 +1,15 @@
 package world.jdl.gateway;
 
 import com.google.gson.JsonElement;
-import world.jdl.gateway.event.IGatewayEvent;
-import world.jdl.gateway.event.events.GuildCreateGatewayEvent;
-import world.jdl.gateway.event.events.ReadyGatewayEvent;
+import world.jdl.observe.Observer;
+import world.jdl.observe.observables.GuildCreateGatewayObservable;
+import world.jdl.observe.observables.ReadyGatewayObservable;
 import world.jdl.gateway.packet.IServerPacketHandler;
 import world.jdl.gateway.packet.bi.HeartbeatGatewayPacket;
 import world.jdl.gateway.packet.server.*;
-import world.jdl.listener.IEventListener;
+import world.jdl.util.ReflectionUtil;
 
+import java.lang.reflect.Constructor;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,12 +19,12 @@ import java.util.Map;
  */
 final class GatewayPacketHandler implements IServerPacketHandler
 {
-    private static final Map<String, Class<? extends IGatewayEvent>> GATEWAY_EVENT_HANDLERS = new HashMap<>();
+    private static final Map<String, Class<? extends Observer.Observable>> GATEWAY_OBSERVABLES = new HashMap<>();
 
     static
     {
-        GATEWAY_EVENT_HANDLERS.put("READY", ReadyGatewayEvent.class);
-        GATEWAY_EVENT_HANDLERS.put("GUILD_CREATE", GuildCreateGatewayEvent.class);
+        GATEWAY_OBSERVABLES.put("READY", ReadyGatewayObservable.class);
+        GATEWAY_OBSERVABLES.put("GUILD_CREATE", GuildCreateGatewayObservable.class);
     }
 
     private final Connection connection;
@@ -36,36 +37,33 @@ final class GatewayPacketHandler implements IServerPacketHandler
     @Override
     public void onDispatch(final DispatchGatewayPacket packet)
     {
-        final Class<? extends IGatewayEvent> eventClass = GATEWAY_EVENT_HANDLERS.get(packet.getEventName());
-        if (eventClass == null)
+        final Observer.Observable observable = createObservable(packet.getEventName(), packet.getData());
+        if (observable == null)
         {
             System.out.println("Don't know how to handle " + packet.getEventName());
             return;
         }
-
-        final JsonElement data = packet.getData();
-
-        switch (packet.getEventName())
-        {
-            case "GUILD_CREATE" -> dispatchEvent(new GuildCreateGatewayEvent(data));
-            default ->
-            {
-                final IGatewayEvent event = Connection.GSON.fromJson(packet.getData(), eventClass);
-                if (event == null)
-                {
-                    return;
-                }
-                dispatchEvent(event);
-            }
-        }
+        connection.getJDL().dispatch(observable);
     }
 
-    void dispatchEvent(final IGatewayEvent event)
+    Observer.Observable createObservable(final String event, final JsonElement data)
     {
-        for (final IEventListener listener : connection.getJDL().getListeners())
+        final Class<? extends Observer.Observable> observableClass = GATEWAY_OBSERVABLES.get(event);
+        if (observableClass == null)
         {
-            event.handle(listener);
+            return null;
         }
+        final Constructor<?> constructor = observableClass.getConstructors()[0];
+        if (constructor.getParameterCount() == 0)
+        {
+            return Connection.GSON.fromJson(data, observableClass);
+        }
+        if (constructor.getParameterCount() != 1
+                || !JsonElement.class.isAssignableFrom(constructor.getParameterTypes()[0]))
+        {
+            throw new RuntimeException("must contain one parameter of a JsonElement");
+        }
+        return (Observer.Observable) ReflectionUtil.createInstance(constructor, data);
     }
 
     @Override

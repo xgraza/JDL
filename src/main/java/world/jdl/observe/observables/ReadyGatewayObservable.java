@@ -1,8 +1,7 @@
-package world.jdl.gateway.event.events;
+package world.jdl.observe.observables;
 
 import com.google.gson.annotations.SerializedName;
-import world.jdl.gateway.event.IGatewayEvent;
-import world.jdl.listener.IEventListener;
+import world.jdl.observe.Observer;
 import world.jdl.structure.guild.Guild;
 import world.jdl.structure.user.User;
 
@@ -65,7 +64,7 @@ import java.util.List;
 //    ]
 //  }
 //}
-public final class ReadyGatewayEvent implements IGatewayEvent
+public final class ReadyGatewayObservable implements Observer.Observable
 {
     @SerializedName("v")
     private int version;
@@ -75,12 +74,6 @@ public final class ReadyGatewayEvent implements IGatewayEvent
     private String resumeGatewayUrl;
     private User user;
     private final List<Guild> guilds = new LinkedList<>();
-
-    @Override
-    public void handle(final IEventListener listener)
-    {
-        listener.onReady(this);
-    }
 
     public User getUser()
     {

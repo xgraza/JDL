@@ -166,4 +166,25 @@ public class User
     {
         this.publicFlags = publicFlags;
     }
+
+    @Override
+    public String toString()
+    {
+        return "User{" +
+                "id=" + id +
+                ", username='" + username + '\'' +
+                ", discriminator='" + discriminator + '\'' +
+                ", globalName='" + globalName + '\'' +
+                ", avatarHash='" + avatarHash + '\'' +
+                ", bot=" + bot +
+                ", system=" + system +
+                ", mfaEnabled=" + mfaEnabled +
+                ", bannerHash='" + bannerHash + '\'' +
+                ", accentColor=" + accentColor +
+                ", locale='" + locale + '\'' +
+                ", flags=" + flags +
+                ", premiumType=" + premiumType +
+                ", publicFlags=" + publicFlags +
+                '}';
+    }
 }

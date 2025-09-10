@@ -171,7 +171,7 @@ public final class Connection extends WebSocketClient
 
     private void handleMessage(final String message)
     {
-        System.out.println(message);
+        //System.out.println(message);
         final Payload payload = GSON.fromJson(message, Payload.class);
         if (payload.getSequence() != null)
         {

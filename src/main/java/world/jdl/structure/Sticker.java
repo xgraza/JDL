@@ -13,7 +13,7 @@ public final class Sticker
     private Snowflake packId;
     private String name;
     private String description;
-    private final List<String> tags = new LinkedList<>();
+    //private final List<String> tags = new LinkedList<>();
     private int type;
     @SerializedName("format_type")
     private int formatType;
@@ -44,10 +44,10 @@ public final class Sticker
         return description;
     }
 
-    public List<String> getTags()
-    {
-        return tags;
-    }
+//    public List<String> getTags()
+//    {
+//        return tags;
+//    }
 
     public int getType()
     {
