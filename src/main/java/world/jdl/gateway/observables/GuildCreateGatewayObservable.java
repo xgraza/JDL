@@ -1,4 +1,4 @@
-package world.jdl.observe.observables;
+package world.jdl.gateway.observables;
 
 import com.google.gson.JsonElement;
 import world.jdl.gateway.Connection;

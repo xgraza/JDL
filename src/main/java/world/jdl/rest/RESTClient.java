@@ -1,10 +1,9 @@
 package world.jdl.rest;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.Strictness;
+import com.google.gson.*;
+import world.jdl.structure.flag.FlagContainer;
 import world.jdl.structure.Snowflake;
+import world.jdl.structure.flag.IFlag;
 
 import java.io.IOException;
 import java.net.URI;
@@ -23,13 +22,21 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  */
 public final class RESTClient
 {
-    private static final String DISCORD_API_URL = "https://discord.com/api/v10";
+    private static RESTClient INSTANCE;
+
+    public static final String DISCORD_API_URL = "https://discord.com/api/v10";
+    public static final String DISCORD_CDN_URL = "https://cdn.discordapp.com";
     private static final String USER_AGENT = "DiscordBot (https://github.com/xgraza/JDL, 1.0.0)";
 
     static final Gson GSON = new GsonBuilder()
+            .setFieldNamingPolicy(FieldNamingPolicy.LOWER_CASE_WITH_UNDERSCORES)
+            .setStrictness(Strictness.LENIENT)
             .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeDeserializer())
             .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeSerializer())
-            .setStrictness(Strictness.LENIENT)
+            .registerTypeAdapter(FlagContainer.class, new FlagContainer.FlagContainerSerializer())
+            .registerTypeAdapter(FlagContainer.class, new FlagContainer.FlagContainerDeserializer())
+            .registerTypeAdapter(IFlag.class, new IFlag.FlagSerializer())
+            .registerTypeAdapter(IFlag.class, new IFlag.FlagDeserializer())
             .create();
 
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -42,7 +49,7 @@ public final class RESTClient
     private final Map<String, RateLimit> rateLimitedRouteMap = new ConcurrentHashMap<>();
     private final Set<String> currentRateLimitedRouteSet = new LinkedHashSet<>();
 
-    public RESTClient(final String authorization)
+    private RESTClient(final String authorization)
     {
         this.authorization = authorization;
 
@@ -110,8 +117,7 @@ public final class RESTClient
     public <T> T getAsync(final Endpoints.Endpoint<T> endpoint)
             throws IOException, InterruptedException
     {
-        final RESTAction<T> restAction = get(endpoint);
-        return restAction.execute();
+        return get(endpoint).execute();
     }
 
     /**
@@ -133,20 +139,39 @@ public final class RESTClient
         return new RESTAction<>(this, requestBuilder.build(), endpoint);
     }
 
+    public <T> T postAsync(final Endpoints.Endpoint<T> endpoint,
+                                  final Object body)
+            throws IOException, InterruptedException
+    {
+        return post(endpoint, body).execute();
+    }
+
+    public <T> RESTAction<T> patch(final Endpoints.Endpoint<T> endpoint,
+                                   final Object body)
+    {
+        final HttpRequest.Builder requestBuilder = createRequest(endpoint);
+        if (body instanceof JsonElement element)
+        {
+            requestBuilder.setHeader("Content-Type", "application/json");
+            requestBuilder.method("PATCH", HttpRequest.BodyPublishers.ofString(GSON.toJson(element)));
+        }
+        return new RESTAction<>(this, requestBuilder.build(), endpoint);
+    }
+
     /**
-     * Checks a {@link HttpResponse<?>}'s status code & x-ratelimit headers for Rate limits
-     * @param restAction the {@link RESTAction<?>}
-     * @param response the {@link HttpResponse<?>}
+     * Checks a {@link HttpResponse}'s status code & x-ratelimit headers for Rate limits
+     * @param restAction the {@link RESTAction}
+     * @param response the {@link HttpResponse}
      * @return if this request was rate limited
      */
-    boolean checkForRateLimit(final RESTAction<?> restAction, final HttpResponse<?> response)
+    boolean handleRateLimit(final RESTAction<?> restAction, final HttpResponse<?> response)
     {
         final String endpointRoute = restAction.getEndpoint().route();
         final HttpHeaders headers = response.headers();
 
-        final String remainingHeader = getHeader(headers.firstValue("x-ratelimit-remaining"));
-        final String retryAfterHeader = getHeader(headers.firstValue("x-ratelimit-reset-after"));
-        final String limitHeader = getHeader(headers.firstValue("x-ratelimit-limit"));
+        final String remainingHeader = headers.firstValue("x-ratelimit-remaining").orElse(null);
+        final String retryAfterHeader = headers.firstValue("x-ratelimit-reset-after").orElse(null);
+        final String limitHeader = headers.firstValue("x-ratelimit-limit").orElse(null);
 
         if (remainingHeader == null || retryAfterHeader == null || limitHeader == null)
         {
@@ -179,11 +204,6 @@ public final class RESTClient
         return false;
     }
 
-    String getHeader(final Optional<String> optional)
-    {
-        return optional.orElse(null);
-    }
-
     /**
      * Creates a base request
      * @param endpoint the {@link world.jdl.rest.Endpoints.Endpoint<T>} object
@@ -201,6 +221,31 @@ public final class RESTClient
     HttpClient getHttpClient()
     {
         return httpClient;
+    }
+
+    /**
+     * Creates a single instance
+     * @param authorization the token
+     * @throws RuntimeException if {@link RESTClient#INSTANCE} is not null
+     * @return a new instance of a {@link RESTClient}
+     */
+    public static RESTClient createInstance(final String authorization)
+    {
+        if (INSTANCE != null)
+        {
+            throw new RuntimeException("already instantiated");
+        }
+        INSTANCE = new RESTClient(authorization);
+        return INSTANCE;
+    }
+
+    /**
+     * Gets the current {@link RESTClient}
+     * @return null or {@link RESTClient}
+     */
+    public static RESTClient getInstance()
+    {
+        return INSTANCE;
     }
 
     private static final class RateLimit

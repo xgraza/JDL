@@ -1,33 +1,36 @@
-package world.jdl.structure;
+package world.jdl.structure.sticker;
 
 import com.google.gson.annotations.SerializedName;
+import world.jdl.structure.IdentifiableObject;
+import world.jdl.structure.Snowflake;
 import world.jdl.structure.user.User;
 
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
-public final class Sticker
+/**
+ * @author xgraza
+ * @since 9/9/25
+ */
+public final class Sticker extends IdentifiableObject
 {
-    private Snowflake id;
     @SerializedName("pack_id")
     private Snowflake packId;
     private String name;
     private String description;
-    //private final List<String> tags = new LinkedList<>();
-    private int type;
+    @SerializedName("tags")
+    private String tags;
+    private final List<String> tagList = new LinkedList<>();
+    private StickerType type;
     @SerializedName("format_type")
-    private int formatType;
+    private StickerFormatType formatType;
     private boolean available;
     @SerializedName("guild_id")
     private Snowflake guildId;
     private User user;
     @SerializedName("sort_value")
     private int sortValue;
-
-    public Snowflake getId()
-    {
-        return id;
-    }
 
     public Snowflake getPackId()
     {
@@ -44,17 +47,21 @@ public final class Sticker
         return description;
     }
 
-//    public List<String> getTags()
-//    {
-//        return tags;
-//    }
+    public List<String> getTags()
+    {
+        if (tags != null && !tags.isEmpty() && tagList.isEmpty())
+        {
+            Collections.addAll(tagList, tags.split(","));
+        }
+        return tagList;
+    }
 
-    public int getType()
+    public StickerType getType()
     {
         return type;
     }
 
-    public int getFormatType()
+    public StickerFormatType getFormatType()
     {
         return formatType;
     }

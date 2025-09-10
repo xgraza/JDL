@@ -1,10 +1,12 @@
 package world.jdl.gateway;
 
+import world.jdl.structure.flag.IBitFlag;
+
 /**
  * @author xgraza
  * @since 9/7/25
  */
-public enum GatewayIntent
+public enum GatewayIntent implements IBitFlag
 {
     GUILDS(1 << 0),
     GUILD_MEMBERS(1 << 1),
@@ -35,7 +37,8 @@ public enum GatewayIntent
         this.bit = bit;
     }
 
-    public int getBit()
+    @Override
+    public int getValue()
     {
         return bit;
     }

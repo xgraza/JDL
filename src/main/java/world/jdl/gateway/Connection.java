@@ -3,7 +3,7 @@ package world.jdl.gateway;
 import com.google.gson.*;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
-import world.jdl.JDL;
+import world.jdl.Client;
 import world.jdl.gateway.compression.Compression;
 import world.jdl.gateway.compression.Compressor;
 import world.jdl.gateway.compression.NoCompression;
@@ -14,7 +14,9 @@ import world.jdl.gateway.packet.OP;
 import world.jdl.gateway.packet.bi.HeartbeatGatewayPacket;
 import world.jdl.gateway.packet.client.*;
 import world.jdl.gateway.packet.server.*;
+import world.jdl.structure.flag.FlagContainer;
 import world.jdl.structure.Snowflake;
+import world.jdl.structure.flag.IFlag;
 import world.jdl.structure.user.activity.Presence;
 import world.jdl.util.ReflectionUtil;
 
@@ -39,6 +41,10 @@ public final class Connection extends WebSocketClient
             .registerTypeAdapter(HeartbeatGatewayPacket.class, new HeartbeatGatewayPacket.HeartbeatPacketDeserializer())
             .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeSerializer())
             .registerTypeAdapter(Snowflake.class, new Snowflake.SnowflakeDeserializer())
+            .registerTypeAdapter(FlagContainer.class, new FlagContainer.FlagContainerSerializer())
+            .registerTypeAdapter(FlagContainer.class, new FlagContainer.FlagContainerDeserializer())
+            .registerTypeAdapter(IFlag.class, new IFlag.FlagSerializer())
+            .registerTypeAdapter(IFlag.class, new IFlag.FlagDeserializer())
             .create();
     private static final IdentifyGatewayPacket.ConnectionProperties DEFAULT_PROPERTIES
             = new IdentifyGatewayPacket.ConnectionProperties(
@@ -64,7 +70,7 @@ public final class Connection extends WebSocketClient
     private final GatewayPacketHandler packetHandler;
     private final GatewayHeartbeat gatewayHeartbeat;
 
-    private final JDL jdl;
+    private final Client client;
     private final Presence defaultPresence;
     private final String token;
     private final int intents;
@@ -72,14 +78,14 @@ public final class Connection extends WebSocketClient
     private int lastSequence;
     private long latency = 0L;
 
-    public Connection(final JDL jdl,
+    public Connection(final Client client,
                       final Presence defaultPresence,
                       final Compression compression,
                       final String token,
                       final int intents)
     {
         super(Connection.createURI(compression));
-        this.jdl = jdl;
+        this.client = client;
         this.defaultPresence = defaultPresence;
         this.token = token;
         this.intents = intents;
@@ -171,7 +177,6 @@ public final class Connection extends WebSocketClient
 
     private void handleMessage(final String message)
     {
-        //System.out.println(message);
         final Payload payload = GSON.fromJson(message, Payload.class);
         if (payload.getSequence() != null)
         {
@@ -222,9 +227,9 @@ public final class Connection extends WebSocketClient
         return lastSequence;
     }
 
-    public JDL getJDL()
+    public Client getJDL()
     {
-        return jdl;
+        return client;
     }
 
     private static URI createURI(final Compression compression)

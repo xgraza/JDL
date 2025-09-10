@@ -3,6 +3,7 @@ package world.jdl.rest;
 import java.io.IOException;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.function.Consumer;
 
 /**
  * @author xgraza
@@ -14,8 +15,8 @@ public final class RESTAction<T>
     private final HttpRequest httpRequest;
     private final Endpoints.Endpoint<T> endpoint;
 
-    private Callback<T> successCallback;
-    private Callback<Throwable> errorCallback = Throwable::printStackTrace;
+    private Consumer<T> successCallback;
+    private Consumer<Throwable> errorCallback = Throwable::printStackTrace;
 
     private boolean throttled;
 
@@ -28,19 +29,31 @@ public final class RESTAction<T>
         this.endpoint = endpoint;
     }
 
-    public void complete(final Callback<T> successCallback, final Callback<Throwable> errorCallback)
+    /**
+     * Completes ths {@link RESTAction} with a success and an error callback
+     * @param successCallback callback to accept on success
+     * @param errorCallback callback to accept on failure
+     */
+    public void complete(final Consumer<T> successCallback, final Consumer<Throwable> errorCallback)
     {
         this.successCallback = successCallback;
         this.errorCallback = errorCallback;
         complete();
     }
 
-    public void complete(final Callback<T> successCallback)
+    /**
+     * Completes this {@link RESTAction} with a success callback
+     * @param successCallback callback to accept on success
+     */
+    public void complete(final Consumer<T> successCallback)
     {
         this.successCallback = successCallback;
         complete();
     }
 
+    /**
+     * Completes this {@link RESTAction}
+     */
     public void complete()
     {
         try
@@ -51,22 +64,28 @@ public final class RESTAction<T>
             }
             if (successCallback != null)
             {
-                successCallback.callback(execute());
+                successCallback.accept(execute());
             }
         } catch (IOException | InterruptedException e)
         {
             if (errorCallback != null)
             {
-                errorCallback.callback(e);
+                errorCallback.accept(e);
             }
         }
     }
 
-    T execute() throws IOException, InterruptedException
+    /**
+     * Executes this {@link RESTAction}
+     * @return {@link T} or null
+     * @throws IOException
+     * @throws InterruptedException
+     */
+    public T execute() throws IOException, InterruptedException
     {
-        final HttpResponse<String> response = restClient.getHttpClient().send(httpRequest,
-                HttpResponse.BodyHandlers.ofString());
-        if (restClient.checkForRateLimit(this, response))
+        final HttpResponse<String> response = restClient.getHttpClient().send(
+                httpRequest, HttpResponse.BodyHandlers.ofString());
+        if (restClient.handleRateLimit(this, response))
         {
             return null;
         }
@@ -86,11 +105,5 @@ public final class RESTAction<T>
     public boolean isThrottled()
     {
         return throttled;
-    }
-
-    @FunctionalInterface
-    public interface Callback<T>
-    {
-        void callback(T completed);
     }
 }

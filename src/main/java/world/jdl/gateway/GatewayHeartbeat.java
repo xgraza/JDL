@@ -14,48 +14,56 @@ final class GatewayHeartbeat
     private static final Timer TIMER = new Timer();
 
     private final Connection connection;
-    private long lastHeartbeatMS = -1L;
+    private long heartbeatSentAt = -1L;
 
     GatewayHeartbeat(final Connection connection)
     {
         this.connection = connection;
     }
 
+    /**
+     * Starts sending a heartbeat packet for a specified time provided in the HELLO event
+     * @param heartbeatIntervalMS the interval in millis
+     */
     void startHeartbeat(final long heartbeatIntervalMS)
     {
-        // I know this looks stupid, but this is how they want us to do this.
-        // The very first heartbeat we send should be heartbeat_interval * jitter (Math.random())
-        // After that, you send a heartbeat every heartbeat_interval
-        TIMER.schedule(new TimerTask()
+        // do not start two heartbeats...
+        if (heartbeatSentAt != -1L)
+        {
+            return;
+        }
+        heartbeat();
+        // Begin normal heartbeat
+        TIMER.scheduleAtFixedRate(new TimerTask()
         {
             @Override
             public void run()
             {
                 heartbeat();
-                System.out.println("Sent first heartbeat");
-
-                // Begin normal heartbeat
-                TIMER.scheduleAtFixedRate(new TimerTask()
-                {
-                    @Override
-                    public void run()
-                    {
-                        System.out.println("Sent normal heartbeat");
-                        heartbeat();
-                    }
-                }, heartbeatIntervalMS, heartbeatIntervalMS);
             }
-        }, (long) (heartbeatIntervalMS * Math.random()));
+        }, heartbeatIntervalMS, heartbeatIntervalMS);
     }
 
+    /**
+     * Checks if the connection is open. If it is, send a HEARTBEAT packet
+     */
     private void heartbeat()
     {
-        lastHeartbeatMS = System.currentTimeMillis();
+        if (!connection.isOpen())
+        {
+            TIMER.cancel();
+            throw new RuntimeException("gateway not connected!");
+        }
+        heartbeatSentAt = System.currentTimeMillis();
         connection.sendPacket(new HeartbeatGatewayPacket(connection.getLastSequence()));
     }
 
-    long getLastHeartbeatMS()
+    /**
+     * The last timestamp of a HEARTBEAT being dispatched
+     * @return the last time a heartbeat was sent
+     */
+    long getHeartbeatSentAt()
     {
-        return lastHeartbeatMS;
+        return heartbeatSentAt;
     }
 }

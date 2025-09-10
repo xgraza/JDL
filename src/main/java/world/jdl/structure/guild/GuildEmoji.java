@@ -1,12 +1,11 @@
 package world.jdl.structure.guild;
 
 import com.google.gson.annotations.SerializedName;
-import world.jdl.structure.Snowflake;
+import world.jdl.structure.IdentifiableObject;
 import world.jdl.structure.user.User;
 
-public final class GuildEmoji
+public final class GuildEmoji extends IdentifiableObject
 {
-    private Snowflake id;
     private String name;
     // private List<Role> roles;
     private User user;
@@ -15,11 +14,6 @@ public final class GuildEmoji
     private boolean managed;
     private boolean animated;
     private boolean available;
-
-    public Snowflake getId()
-    {
-        return id;
-    }
 
     public String getName()
     {

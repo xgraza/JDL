@@ -1,9 +1,10 @@
 package world.jdl.gateway;
 
 import com.google.gson.JsonElement;
+import world.jdl.gateway.observables.HeartbeatAckObservable;
 import world.jdl.observe.Observer;
-import world.jdl.observe.observables.GuildCreateGatewayObservable;
-import world.jdl.observe.observables.ReadyGatewayObservable;
+import world.jdl.gateway.observables.GuildCreateGatewayObservable;
+import world.jdl.gateway.observables.ReadyGatewayObservable;
 import world.jdl.gateway.packet.IServerPacketHandler;
 import world.jdl.gateway.packet.bi.HeartbeatGatewayPacket;
 import world.jdl.gateway.packet.server.*;
@@ -29,7 +30,7 @@ final class GatewayPacketHandler implements IServerPacketHandler
 
     private final Connection connection;
 
-    public GatewayPacketHandler(final Connection connection)
+    GatewayPacketHandler(final Connection connection)
     {
         this.connection = connection;
     }
@@ -94,7 +95,8 @@ final class GatewayPacketHandler implements IServerPacketHandler
     public void onHeartbeatAck(final HeartbeatAckGatewayPacket packet)
     {
         final long timestampMS = System.currentTimeMillis();
-        final long latency = timestampMS - connection.getGatewayHeartbeat().getLastHeartbeatMS();
+        final long latency = timestampMS - connection.getGatewayHeartbeat().getHeartbeatSentAt();
         connection.setLatency(latency);
+        connection.getJDL().dispatch(new HeartbeatAckObservable(latency));
     }
 }

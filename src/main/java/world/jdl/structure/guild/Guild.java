@@ -1,15 +1,15 @@
 package world.jdl.structure.guild;
 
 import com.google.gson.annotations.SerializedName;
+import world.jdl.structure.IdentifiableObject;
 import world.jdl.structure.Snowflake;
-import world.jdl.structure.Sticker;
+import world.jdl.structure.sticker.Sticker;
 
 import java.util.LinkedList;
 import java.util.List;
 
-public class Guild
+public class Guild extends IdentifiableObject
 {
-    private Snowflake id;
     private boolean unavailable;
     private String name;
     @SerializedName("icon")
@@ -76,12 +76,6 @@ public class Guild
     private Snowflake safetyAlertsChannelId;
     // @SerializedName("incidents_data")
     // private final List<IncidentData> incidents = new LinkedList<>();
-
-
-    public Snowflake getId()
-    {
-        return id;
-    }
 
     public boolean isUnavailable()
     {
@@ -257,7 +251,7 @@ public class Guild
     public String toString()
     {
         return "Guild{" +
-                "id=" + id +
+                "id=" + getSnowflake() +
                 ", unavailable=" + unavailable +
                 ", name='" + name + '\'' +
                 ", iconHash='" + iconHash + '\'' +

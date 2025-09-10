@@ -1,6 +1,8 @@
 package world.jdl.rest;
 
+import com.google.gson.JsonObject;
 import world.jdl.structure.guild.Guild;
+import world.jdl.structure.user.SelfUser;
 import world.jdl.structure.user.User;
 
 /**
@@ -9,8 +11,15 @@ import world.jdl.structure.user.User;
  */
 public final class Endpoints
 {
+    public static final Endpoint<Object> GET_GATEWAY = Endpoint.of(
+            Endpoint.Method.GET, "/gateway", Object.class);
+
     public interface Users
     {
+        Endpoint<SelfUser> GET_SELF = Endpoint.of(
+                Endpoint.Method.GET, "/users/@me", SelfUser.class);
+        Endpoint<SelfUser> MODIFY_USER = GET_SELF.derive(Endpoint.Method.PATCH);
+
         Endpoint<User> GET_USER = Endpoint.of(
                 Endpoint.Method.GET, "/users/%s", User.class);
     }
